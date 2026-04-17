@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Premium Snake Game</title>
+    <meta name="description" content="A beautiful snake game with recent game preview.">
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="background-animation"></div>
+    <div class="container" id="app">
+        <!-- Main Menu -->
+        <div id="main-menu" class="glass-panel active">
+            <h1>Neon Snake</h1>
+            <button id="start-btn" class="btn primary-btn">Start Game</button>
+            <div id="recent-game-container">
+                <h2>Recent Game Preview</h2>
+                <div id="preview-box">
+                    <canvas id="preview-canvas" width="200" height="200"></canvas>
+                    <p id="preview-score" class="score-text">No recent game</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Game Screen -->
+        <div id="game-screen" class="glass-panel hidden">
+            <div class="game-header">
+                <div class="score-display">Score: <span id="current-score">0</span></div>
+                <div class="score-display">High Score: <span id="high-score">0</span></div>
+            </div>
+            <canvas id="game-canvas" width="400" height="400"></canvas>
+            <div style="margin-top: 1.5rem">
+                <button id="back-btn" class="btn secondary-btn" style="margin-top: 0">Back to Menu</button>
+            </div>
+        </div>
+        
+        <!-- Game Over Modal -->
+        <div id="game-over-modal" class="modal hidden">
+            <div class="glass-panel modal-content">
+                <h2>Game Over!</h2>
+                <p class="final-score-text">Final Score: <span id="final-score">0</span></p>
+                <div class="modal-actions">
+                    <button id="restart-btn" class="btn primary-btn">Play Again</button>
+                    <button id="menu-btn" class="btn secondary-btn">Main Menu</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
