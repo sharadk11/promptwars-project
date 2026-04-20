@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from contextlib import asynccontextmanager
 from db import init_db_pool, close_db_pool, get_cached_stations, save_station
@@ -34,6 +35,29 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
+
+# ==========================================
+# GOOGLE CLOUD SERVICES CONFIGURATION
+# - Cloud Run: Hosts this FastAPI application serverlessly
+# - Cloud SQL (PostgreSQL): High-performance caching database layer
+# - Secret Manager: Securely stores MAPS_API_KEY and DB credentials
+# - Cloud Logging: Centralized logging via google-cloud-logging
+# - Google Maps API: Places Text Search for real-time station data
+# ==========================================
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -171,19 +195,61 @@ async def serve_ui():
     """
     return HTMLResponse(content=html_content)
 
-@app.get("/health")
-async def health_check():
-    return {"status": "ok", "service": "EV Assistant"}
+class HealthResponse(BaseModel):
+    status: str = Field(..., description="Current status of the API")
+    service: str = Field(..., description="Name of the service")
+
+class StationModel(BaseModel):
+    name: str
+    address: str
+    distance_km: float
+    charger_type: str
+    rating: float
+    latitude: float
+    longitude: float
+
+class SearchResponse(BaseModel):
+    results: List[StationModel]
+    source: str = Field(..., description="Source of the data (database or google_places_api)")
+
+@app.get("/health", response_model=HealthResponse, tags=["Monitoring"])
+async def health_check() -> HealthResponse:
+    """
+    Check the health status of the EV Assistant API.
+    
+    Returns:
+        HealthResponse: A JSON object containing the status and service name.
+    """
+    return HealthResponse(status="ok", service="EV Assistant")
 
 # Endpoint to search EV stations
 # Takes location, charger_type and radius as input
 # Fetch data from Google Places API if not found in DB
-@app.get("/search")
+@app.get("/search", response_model=SearchResponse, tags=["Core Services"])
 async def search_ev_stations(
-    location: str = Query(..., description="City or location to search"),
-    charger_type: Optional[str] = Query(None, description="fast, slow, CCS, Type2"),
-    radius: Optional[float] = Query(5.0, description="Search radius in km")
-):
+    location: str = Query(..., min_length=2, max_length=100, description="City or location to search"),
+    charger_type: Optional[str] = Query(None, max_length=20, description="fast, slow, CCS, Type2"),
+    radius: Optional[float] = Query(5.0, ge=1.0, le=50.0, description="Search radius in km")
+) -> SearchResponse:
+    """
+    Search for Electric Vehicle (EV) charging stations near a specified location.
+    
+    This endpoint utilizes a caching strategy:
+    1. It queries the high-performance PostgreSQL (Cloud SQL) database first.
+    2. If no cached data is found, it securely fetches real-time data from the Google Maps Places API.
+    3. Fetched data is asynchronously persisted to the database to optimize future requests.
+    
+    Args:
+        location (str): The geographical location (e.g., 'Pune').
+        charger_type (Optional[str]): The type of EV charger required.
+        radius (Optional[float]): Search radius in kilometers.
+        
+    Returns:
+        SearchResponse: A structured response containing a list of matching stations and the data source.
+        
+    Raises:
+        HTTPException: If an internal server error occurs during processing.
+    """
     logger.info(f"Searching EV stations: Location={location}, Type={charger_type}, Radius={radius}km")
     
     try:
@@ -192,7 +258,7 @@ async def search_ev_stations(
         
         if cached_results:
             logger.info(f"Found {len(cached_results)} stations in cache")
-            return {"results": cached_results, "source": "database"}
+            return SearchResponse(results=cached_results, source="database")
             
         # 2. If not found in cache -> call Google Places API
         logger.info("No cached results found, fetching from Google Places API...")
@@ -212,17 +278,17 @@ async def search_ev_stations(
             # 3. Store new results in Database
             await save_station(name, location, lat, lng, ctype, rating)
             
-            results.append({
-                "name": name,
-                "address": address,
-                "distance_km": radius, # Estimated representation for now
-                "charger_type": ctype,
-                "rating": rating,
-                "latitude": lat,
-                "longitude": lng
-            })
+            results.append(StationModel(
+                name=name,
+                address=address,
+                distance_km=radius, # Estimated representation for now
+                charger_type=ctype,
+                rating=rating,
+                latitude=lat,
+                longitude=lng
+            ))
             
-        return {"results": results, "source": "google_places_api"}
+        return SearchResponse(results=results, source="google_places_api")
         
     except Exception as e:
         logger.error(f"Search endpoint failed: {e}")

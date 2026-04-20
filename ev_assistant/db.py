@@ -11,7 +11,18 @@ DB_NAME = os.environ.get("DB_NAME", "ev_db")
 
 pool = None
 
-async def init_db_pool():
+from typing import List, Dict, Any, Optional
+
+async def init_db_pool() -> None:
+    """
+    Initialize the asynchronous PostgreSQL connection pool.
+    
+    This creates a connection pool to the Google Cloud SQL instance
+    using credentials loaded from environment variables.
+    
+    Raises:
+        Exception: If the database connection fails.
+    """
     global pool
     try:
         pool = await asyncpg.create_pool(
@@ -28,13 +39,27 @@ async def init_db_pool():
         logger.error(f"Failed to connect to database: {e}")
         raise
 
-async def close_db_pool():
+async def close_db_pool() -> None:
+    """
+    Close the active PostgreSQL connection pool gracefully.
+    """
     global pool
     if pool:
         await pool.close()
         logger.info("Database connection pool closed.")
 
-async def get_cached_stations(location: str, charger_type: str, radius: float):
+async def get_cached_stations(location: str, charger_type: Optional[str], radius: float) -> List[Dict[str, Any]]:
+    """
+    Retrieve cached EV charging stations from the database.
+    
+    Args:
+        location (str): The city or location string.
+        charger_type (Optional[str]): The specific charger type requested.
+        radius (float): The search radius in kilometers.
+        
+    Returns:
+        List[Dict[str, Any]]: A list of dictionary objects representing EV stations.
+    """
     if not pool:
         try:
             await init_db_pool()
@@ -65,7 +90,18 @@ async def get_cached_stations(location: str, charger_type: str, radius: float):
         logger.error(f"DB Error while fetching stations: {e}")
         return []
 
-async def save_station(name: str, city: str, lat: float, lng: float, charger_type: str, rating: float):
+async def save_station(name: str, city: str, lat: float, lng: float, charger_type: str, rating: float) -> None:
+    """
+    Save a new EV charging station record into the database.
+    
+    Args:
+        name (str): Name of the station.
+        city (str): City where the station is located.
+        lat (float): Latitude coordinate.
+        lng (float): Longitude coordinate.
+        charger_type (str): Type of charger available.
+        rating (float): Average user rating.
+    """
     if not pool:
          try:
              await init_db_pool()
