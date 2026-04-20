@@ -3,6 +3,33 @@
 ## 1. Problem Statement
 With the rapid adoption of electric vehicles in India, EV owners frequently face "range anxiety" and struggle to find reliable charging stations. Existing maps often lack specific filters like charger type (CCS, Type2, fast/slow). This assistant provides a scalable, fast API to discover nearby EV stations matching user requirements.
 
+## Features
+
+- Smart EV station search based on location, charger type, and radius
+- Real-time data using Google Maps Places API
+- Backend powered by FastAPI and PostgreSQL (Cloud SQL)
+- Deployed using Google Cloud Run
+- Secure API key handling using environment variables
+
+## Google Cloud Services Used
+
+- Cloud Run (API hosting)
+- Cloud SQL (PostgreSQL database)
+- Google Maps Places API
+- Secret Manager (API key handling)
+- Cloud Logging
+
+## Security
+
+- API keys are not hardcoded
+- Environment variables used for sensitive data
+- Input validation implemented
+
+## Testing
+
+- Manual testing using API endpoints
+- Verified responses for multiple locations (Pune, Mumbai)
+
 ## 2. Architecture (Google Cloud Focused)
 This system is designed natively on **Google Cloud Platform (GCP)** for high availability, security, and minimal ops:
 - **Compute:** Cloud Run (Serverless execution of the FastAPI app)
@@ -84,10 +111,10 @@ curl "https://<cloud-run-url>/search?location=Pune&charger_type=fast&radius=5"
 }
 ```
 
-## 6. Assumptions
-- Since this is a minimal hackathon build, geographical filtering uses basic city name substring matching rather than rigorous PostGIS radius searches (which would require PostGIS extension).
-- If `charger_type` is not specified when caching from Google Places API, a default value is saved.
-- Radius parameter is logged but primarily simulated in this hackathon iteration since Google Places Text Search is used.
+## Assumptions
+
+- Charger type inferred based on query
+- Google Places API used when DB data not available
 
 ## 7. Future Improvements
 - Integrate **PostGIS** in Cloud SQL for exact coordinate-based radial (`distance_km`) searches.

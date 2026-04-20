@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.responses import HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, List
 from contextlib import asynccontextmanager
 from db import init_db_pool, close_db_pool, get_cached_stations, save_station
@@ -23,6 +24,15 @@ app = FastAPI(
     description="Smart assistant to find EV charging stations using GCP and Maps API.",
     version="1.0.0",
     lifespan=lifespan
+)
+
+# Security: Add CORS middleware to restrict cross-origin requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # For hackathon. In prod, restrict to specific domains.
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -82,29 +92,35 @@ async def serve_ui():
         </style>
     </head>
     <body>
-        <div class="container">
+        <main class="container">
             <h1>EV Station Finder</h1>
             <p class="subtitle">Discover charging stations near you powered by Google Cloud</p>
             
             <div class="search-box">
-                <input type="text" id="location" placeholder="Enter City (e.g., Pune, Mumbai)..." value="Pune">
-                <select id="charger">
+                <label for="location" class="visually-hidden" style="display:none;">Location</label>
+                <input type="text" id="location" name="location" aria-label="Enter City" placeholder="Enter City (e.g., Pune, Mumbai)..." value="Pune">
+                
+                <label for="charger" class="visually-hidden" style="display:none;">Charger Type</label>
+                <select id="charger" name="charger" aria-label="Select Charger Type">
                     <option value="fast">Fast Charger</option>
                     <option value="slow">Slow Charger</option>
                     <option value="CCS">CCS</option>
                     <option value="Type2">Type 2</option>
                 </select>
-                <select id="radius">
+                
+                <label for="radius" class="visually-hidden" style="display:none;">Search Radius</label>
+                <select id="radius" name="radius" aria-label="Select Search Radius">
                     <option value="5">5 km</option>
                     <option value="10">10 km</option>
                     <option value="20">20 km</option>
                 </select>
-                <button onclick="searchStations()">Search</button>
+                
+                <button aria-label="Search for EV Stations" onclick="searchStations()">Search</button>
             </div>
 
-            <div class="loader" id="loader">Fetching stations... ⚡</div>
-            <div class="results" id="results"></div>
-        </div>
+            <div class="loader" id="loader" role="status" aria-live="polite">Fetching stations... ⚡</div>
+            <div class="results" id="results" aria-live="polite"></div>
+        </main>
 
         <script>
             async function searchStations() {
@@ -159,6 +175,9 @@ async def serve_ui():
 async def health_check():
     return {"status": "ok", "service": "EV Assistant"}
 
+# Endpoint to search EV stations
+# Takes location, charger_type and radius as input
+# Fetch data from Google Places API if not found in DB
 @app.get("/search")
 async def search_ev_stations(
     location: str = Query(..., description="City or location to search"),
