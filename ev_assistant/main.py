@@ -222,35 +222,32 @@ async def health_check() -> HealthResponse:
     """
     return HealthResponse(status="ok", service="EV Assistant")
 
+cache = {}
+
+def get_cache_key(location, charger_type, radius):
+    return f"{location}_{charger_type}_{radius}"
+
 # Endpoint to search EV stations
 # Takes location, charger_type and radius as input
 # Fetch data from Google Places API if not found in DB
-@app.get("/search", response_model=SearchResponse, tags=["Core Services"])
+@app.get("/search", tags=["Core Services"])
 async def search_ev_stations(
-    location: str = Query(..., min_length=2, max_length=100, description="City or location to search"),
-    charger_type: Optional[str] = Query(None, max_length=20, description="fast, slow, CCS, Type2"),
-    radius: Optional[float] = Query(5.0, ge=1.0, le=50.0, description="Search radius in km")
-) -> SearchResponse:
+    location: Optional[str] = Query(None, description="City or location to search"),
+    charger_type: Optional[str] = Query(None, description="fast, slow, CCS, Type2"),
+    radius: Optional[float] = Query(5.0, description="Search radius in km")
+):
     """
-    Search for Electric Vehicle (EV) charging stations near a specified location.
-    
-    This endpoint utilizes a caching strategy:
-    1. It queries the high-performance PostgreSQL (Cloud SQL) database first.
-    2. If no cached data is found, it securely fetches real-time data from the Google Maps Places API.
-    3. Fetched data is asynchronously persisted to the database to optimize future requests.
-    
-    Args:
-        location (str): The geographical location (e.g., 'Pune').
-        charger_type (Optional[str]): The type of EV charger required.
-        radius (Optional[float]): Search radius in kilometers.
-        
-    Returns:
-        SearchResponse: A structured response containing a list of matching stations and the data source.
-        
-    Raises:
-        HTTPException: If an internal server error occurs during processing.
+    Fetch EV charging stations using DB or Google API fallback.
     """
+    if not location:
+        return {"error": "Location is required"}
+        
     logger.info(f"Searching EV stations: Location={location}, Type={charger_type}, Radius={radius}km")
+    
+    key = get_cache_key(location, charger_type, radius)
+    if key in cache:
+        logger.info("Found in memory cache!")
+        return cache[key]
     
     try:
         # 1. Check PostgreSQL for cached results
@@ -258,13 +255,15 @@ async def search_ev_stations(
         
         if cached_results:
             logger.info(f"Found {len(cached_results)} stations in cache")
-            return SearchResponse(results=cached_results, source="database")
+            results = {"results": cached_results, "source": "database"}
+            cache[key] = results
+            return results
             
         # 2. If not found in cache -> call Google Places API
         logger.info("No cached results found, fetching from Google Places API...")
         places = await fetch_places_from_google(location, radius)
         
-        results = []
+        results_list = []
         for place in places:
             name = place.get("name", "Unknown Station")
             address = place.get("formatted_address", "")
@@ -278,18 +277,20 @@ async def search_ev_stations(
             # 3. Store new results in Database
             await save_station(name, location, lat, lng, ctype, rating)
             
-            results.append(StationModel(
-                name=name,
-                address=address,
-                distance_km=radius, # Estimated representation for now
-                charger_type=ctype,
-                rating=rating,
-                latitude=lat,
-                longitude=lng
-            ))
+            results_list.append({
+                "name": name,
+                "address": address,
+                "distance_km": radius, # Estimated representation for now
+                "charger_type": ctype,
+                "rating": rating,
+                "latitude": lat,
+                "longitude": lng
+            })
             
-        return SearchResponse(results=results, source="google_places_api")
+        final_results = {"results": results_list, "source": "google_places_api"}
+        cache[key] = final_results
+        return final_results
         
     except Exception as e:
         logger.error(f"Search endpoint failed: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error while searching for EV stations")
+        return {"error": "Something went wrong"}

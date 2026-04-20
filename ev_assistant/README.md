@@ -19,6 +19,10 @@ With the rapid adoption of electric vehicles in India, EV owners frequently face
 - Secret Manager (API key handling)
 - Cloud Logging
 
+## Optimization Strategy
+
+Implemented in-memory caching to reduce redundant API calls and improve response
+
 ## Security
 
 - API keys are not hardcoded
